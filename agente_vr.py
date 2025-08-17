@@ -1,6 +1,7 @@
 import pandas as pd
 import unicodedata
 from pathlib import Path
+import re
 
 # --- CONFIGURAÇÃO ---
 INPUT_DIR = Path("dados_entrada")
@@ -16,13 +17,32 @@ class AgenteVR:
         self.status = "Iniciado"
         print(">> AgenteVR criado e pronto para a execução. <<")
 
+    # def _normalizar_nome(self, texto: str) -> str:
+    #     texto_str = str(texto)
+    #     texto_normalizado = ''.join(
+    #         c for c in unicodedata.normalize('NFD', texto_str)
+    #         if unicodedata.category(c) != 'Mn'
+    #     )
+    #     return texto_normalizado.lower().replace(' ', '').replace('_', '')
     def _normalizar_nome(self, texto: str) -> str:
+        """
+        Converte o input para string, remove acentos, TODOS os tipos de espaços
+        (usando Regex) e converte para minúsculas.
+        """
+        # Etapa de segurança: Garante que o input seja uma string
         texto_str = str(texto)
-        texto_normalizado = ''.join(
+        
+        # Remove acentos (compatibilidade NFD)
+        texto_sem_acentos = ''.join(
             c for c in unicodedata.normalize('NFD', texto_str)
             if unicodedata.category(c) != 'Mn'
         )
-        return texto_normalizado.lower().replace(' ', '').replace('_', '')
+        
+        # USA REGEX para remover todas as ocorrências de espaços de qualquer tipo
+        texto_sem_espacos = re.sub(r'\s+', '', texto_sem_acentos)
+        
+        # Converte para minúsculas e remove underscores que possam ter sobrado
+        return texto_sem_espacos.lower().replace('_', '')
 
     def _carregar_dados(self) -> bool:
         print("\n--- [FASE 1] Iniciando Carregamento de Dados ---")
@@ -145,6 +165,55 @@ class AgenteVR:
         print(self.df_consolidado.head())
         print(f"\n   Tabela final criada com {self.df_consolidado.shape[0]} linhas e {self.df_consolidado.shape[1]} colunas.")
 
+
+    def _consolidar_bases_referencia(self):
+        """
+        [FASE 3.1] Cria uma base de referência consolidada a partir das
+        tabelas de dias úteis e valor por sindicato/estado, usando cópias.
+        """
+        print("\n--- [FASE 3.1] Consolidando Bases de Referência (Sindicato/Valor) ---")
+        
+        # Nomes normalizados das tabelas que vamos usar
+        nome_dias_uteis = 'basediasuteis'
+        nome_valor_sindicato = 'basesindicatoxvalor'
+        
+        # Verificação de segurança: as tabelas de referência existem?
+        if nome_dias_uteis not in self.dados or nome_valor_sindicato not in self.dados:
+            print(f"  [AVISO] Não foi possível encontrar as tabelas '{nome_dias_uteis}' e/ou '{nome_valor_sindicato}'. Pulando esta etapa.")
+            # Cria um atributo vazio para não quebrar as fases seguintes
+            self.df_referencia = None 
+            return
+
+        # ---- SUA SUGESTÃO APLICADA AQUI ----
+        # É uma ótima prática trabalhar com cópias para não alterar as tabelas originais
+        dias_uteis = self.dados[nome_dias_uteis].copy()
+        valor_estado = self.dados[nome_valor_sindicato].copy()
+        # ------------------------------------
+
+        # Passo 1: Extrair a sigla (UF) da coluna 'sindicato'
+        print(" -> Extraindo UF da tabela de dias úteis...")
+        dias_uteis['uf'] = dias_uteis['basediasuteisde15/04a15/05'].str.extract(r'\b(pr|rs|sp|rj)\b', flags=re.IGNORECASE)
+
+        # Passo 2: Criar o mapa de Estado para UF (com nomes normalizados)
+        mapa_estado_uf = {
+            'parana': 'pr', 'riodejaneiro': 'rj',
+            'riograndedosul': 'rs', 'saopaulo': 'sp'
+        }
+        
+        # Passo 3: Aplicar o mapa para criar a coluna 'uf' na tabela de valores
+        print(" -> Mapeando Estado para UF na tabela de valores...")
+        valor_estado['uf'] = valor_estado['estado'].map(mapa_estado_uf)
+
+        # Passo 4: Juntar as duas tabelas pela coluna 'uf'
+        print(" -> Juntando as duas tabelas de referência...")
+        df_referencia_consolidada = pd.merge(dias_uteis, valor_estado, on='uf', how='left')
+
+        # Armazena o resultado em um novo atributo do agente
+        self.df_referencia = df_referencia_consolidada
+        
+        print("--- [FASE 3.1] Bases de Referência consolidadas com sucesso! ---")
+        print("   Amostra da tabela de referência criada:")
+        print(self.df_referencia.head())
     def executar(self):
         """
         Orquestra a execução de todas as tarefas do agente na ordem correta.
@@ -157,6 +226,7 @@ class AgenteVR:
             # ORDEM DE EXECUÇÃO ALTERADA
             # 1. Prepara e normaliza os dados primeiro.
             self._preparar_dados()
+            self._consolidar_bases_referencia()
             self._consolidar_dados()
             # 2. Inspeciona os dados DEPOIS de terem sido alterados.
             # self.inspecionar_dados()
