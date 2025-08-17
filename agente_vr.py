@@ -72,6 +72,9 @@ class AgenteVR:
 
         self.status = "Dados Preparados"
         print("--- [FASE 2] Preparação de dados concluída. ---")
+        print("\n--- [AGENTE] Iniciando Fase 3: Preparação dos Dados ---")
+
+
 
 
     def inspecionar_dados(self):
@@ -91,9 +94,56 @@ class AgenteVR:
             print(f"    - Dimensões: {dataframe.shape[0]} linhas, {dataframe.shape[1]} colunas")
             print(f"    - Colunas (Normalizadas): {dataframe.columns.tolist()}")
             print(f"    - Colunas (Normalizadas): {dataframe.head()}")
+            print(f"    - Colunas (Normalizadas): {dataframe.info()}")
             
         print("\n--- [INSPEÇÃO] Fim da verificação ---")
 
+    def _consolidar_dados(self):
+        """
+        [FASE 3] Consolida as tabelas de Ativos, Férias, Desligados e Admissão
+        em uma única base de dados, usando 'matricula' como chave.
+        """
+        print("\n--- [FASE 3] Iniciando Consolidação dos Dados ---")
+        
+        # --- ETAPA 1: Definições e Verificações ---
+        chave_primaria = 'matricula'
+        
+        # Nomes normalizados das tabelas que vamos usar
+        tabela_base_nome = 'ativos'
+        nomes_para_juntar = ['ferias', 'desligados', 'admissaoabril']
+        if tabela_base_nome not in self.dados:
+            print(f"  [ERRO CRÍTICO] A tabela base '{tabela_base_nome}' não foi encontrada. A consolidação não pode continuar.")
+            return
+        df_consolidado = self.dados[tabela_base_nome].copy()
+        print(f" -> Base inicial '{tabela_base_nome}' definida com {len(df_consolidado)} registros {df_consolidado.shape[1]} colunas.")
+        # Loop para juntar as outras tabelas
+        for nome_tabela in nomes_para_juntar:
+            # Verifica se a tabela da vez existe nos dados carregados
+            if nome_tabela in self.dados:
+                print(f"   -> Juntando dados da tabela '{nome_tabela}'...")
+                
+                tabela_para_juntar = self.dados[nome_tabela]
+                
+                # Verifica se a tabela tem a chave primária antes de juntar
+                if chave_primaria in tabela_para_juntar.columns:
+                    df_consolidado = df_consolidado.merge(
+                        tabela_para_juntar,
+                        on=chave_primaria,
+                        how='left' # 'left' para manter todos da tabela de ativos
+                    )
+                else:
+                    print(f"   [AVISO] A tabela '{nome_tabela}' foi pulada pois não contém a chave '{chave_primaria}'.")
+            else:
+                print(f"   [AVISO] A tabela '{nome_tabela}' não foi encontrada nos dados carregados e será pulada.")
+    # --- ETAPA 3: Armazenamento e Verificação ---
+        # Armazena o resultado final em um novo atributo do agente
+        self.df_consolidado = df_consolidado
+        
+        print("--- [FASE 3] Consolidação concluída com sucesso! ---")
+        print("\n -> Verificando o resultado da consolidação...")
+        print("   Amostra da Tabela Consolidada:")
+        print(self.df_consolidado.head())
+        print(f"\n   Tabela final criada com {self.df_consolidado.shape[0]} linhas e {self.df_consolidado.shape[1]} colunas.")
 
     def executar(self):
         """
@@ -107,9 +157,9 @@ class AgenteVR:
             # ORDEM DE EXECUÇÃO ALTERADA
             # 1. Prepara e normaliza os dados primeiro.
             self._preparar_dados()
-            
+            self._consolidar_dados()
             # 2. Inspeciona os dados DEPOIS de terem sido alterados.
-            self.inspecionar_dados()
+            # self.inspecionar_dados()
         else:
             print("\n[AGENTE] A execução não pode continuar pois o carregamento de dados falhou ou não encontrou arquivos.")
         
