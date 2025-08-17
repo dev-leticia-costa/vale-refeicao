@@ -1,0 +1,11 @@
+
+
+.venv/
+.env
+src/data_extract
+# Arquivos Python gerados automaticamente
+__pycache__/
+*.pyc
+*.pyd
+*.so
+.Python
