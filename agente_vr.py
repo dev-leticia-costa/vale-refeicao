@@ -3,7 +3,7 @@ import unicodedata
 from pathlib import Path
 import re
 
-# --- CONFIGURAÇÃO ---
+# --- CONFIGURAÇÃO INPUT ---
 INPUT_DIR = Path("dados_entrada")
 
 class AgenteVR:
@@ -17,17 +17,11 @@ class AgenteVR:
         self.status = "Iniciado"
         print(">> AgenteVR criado e pronto para a execução. <<")
 
-    # def _normalizar_nome(self, texto: str) -> str:
-    #     texto_str = str(texto)
-    #     texto_normalizado = ''.join(
-    #         c for c in unicodedata.normalize('NFD', texto_str)
-    #         if unicodedata.category(c) != 'Mn'
-    #     )
-    #     return texto_normalizado.lower().replace(' ', '').replace('_', '')
+
     def _normalizar_nome(self, texto: str) -> str:
         """
         Converte o input para string, remove acentos, TODOS os tipos de espaços
-        (usando Regex) e converte para minúsculas.
+        (usando Regex), converte para minúsculas e retira barras.
         """
         # Etapa de segurança: Garante que o input seja uma string
         texto_str = str(texto)
@@ -40,11 +34,27 @@ class AgenteVR:
         
         # USA REGEX para remover todas as ocorrências de espaços de qualquer tipo
         texto_sem_espacos = re.sub(r'\s+', '', texto_sem_acentos)
-        
+        texto_sem_espacos_underscore = texto_sem_espacos.lower().replace(' ', '_')
+        texto_sem_espacos_underscore = texto_sem_espacos_underscore.lower().replace('/', '_')
+    
         # Converte para minúsculas e remove underscores que possam ter sobrado
-        return texto_sem_espacos.lower().replace('_', '')
+        return texto_sem_espacos_underscore
+   
 
     def _carregar_dados(self) -> bool:
+        """
+        (Método interno) Carrega arquivos .xlsx do diretório de entrada.
+
+        Busca todos os arquivos Excel (`.xlsx`) na pasta `self.input_dir`,
+        lê cada um deles como um DataFrame do pandas e os armazena no
+        dicionário `self.dados`.
+
+        A chave de cada DataFrame em `self.dados` é o nome do arquivo normalizado.
+        O status da operação é registrado em `self.status`.
+
+        Retorna `True` em caso de sucesso no carregamento de um ou mais arquivos,
+        e `False` caso contrário (nenhum arquivo encontrado ou erro).
+        """
         print("\n--- [FASE 1] Iniciando Carregamento de Dados ---")
         print(f" -> Procurando por arquivos .xlsx na pasta '{self.input_dir}'...")
         
@@ -72,7 +82,6 @@ class AgenteVR:
             self.status = f"Erro no carregamento: {e}"
             return False
 
-    # MÉTODO ATUALIZADO PARA REALIZAR A NORMALIZAÇÃO
     def _preparar_dados(self):
         """
         Executa a limpeza e padronização dos dados, incluindo a normalização
@@ -93,8 +102,6 @@ class AgenteVR:
         self.status = "Dados Preparados"
         print("--- [FASE 2] Preparação de dados concluída. ---")
         print("\n--- [AGENTE] Iniciando Fase 3: Preparação dos Dados ---")
-
-
 
 
     def inspecionar_dados(self):
@@ -118,7 +125,7 @@ class AgenteVR:
             
         print("\n--- [INSPEÇÃO] Fim da verificação ---")
 
-    def _consolidar_dados(self):
+    def _consolidar_dados_empregados(self):
         """
         [FASE 3] Consolida as tabelas de Ativos, Férias, Desligados e Admissão
         em uma única base de dados, usando 'matricula' como chave.
@@ -161,12 +168,13 @@ class AgenteVR:
         
         print("--- [FASE 3] Consolidação concluída com sucesso! ---")
         print("\n -> Verificando o resultado da consolidação...")
-        print("   Amostra da Tabela Consolidada:")
+        print("   Amostra da Tabela Consolidada (EMPREGADOS):")
         print(self.df_consolidado.head())
+        print(self.df_consolidado.info())
         print(f"\n   Tabela final criada com {self.df_consolidado.shape[0]} linhas e {self.df_consolidado.shape[1]} colunas.")
 
 
-    def _consolidar_bases_referencia(self):
+    def _consolidar_bases_referencia_sindicato(self):
         """
         [FASE 3.1] Cria uma base de referência consolidada a partir das
         tabelas de dias úteis e valor por sindicato/estado, usando cópias.
@@ -192,7 +200,7 @@ class AgenteVR:
 
         # Passo 1: Extrair a sigla (UF) da coluna 'sindicato'
         print(" -> Extraindo UF da tabela de dias úteis...")
-        dias_uteis['uf'] = dias_uteis['basediasuteisde15/04a15/05'].str.extract(r'\b(pr|rs|sp|rj)\b', flags=re.IGNORECASE)
+        dias_uteis['uf'] = dias_uteis['basediasuteisde15_04a15_05'].str.extract(r'\b(pr|rs|sp|rj)\b', flags=re.IGNORECASE)
 
         # Passo 2: Criar o mapa de Estado para UF (com nomes normalizados)
         mapa_estado_uf = {
@@ -212,8 +220,51 @@ class AgenteVR:
         self.df_referencia = df_referencia_consolidada
         
         print("--- [FASE 3.1] Bases de Referência consolidadas com sucesso! ---")
-        print("   Amostra da tabela de referência criada:")
+        print("   Amostra da tabela de referência SINDICATO criada:")
         print(self.df_referencia.head())
+        print(self.df_referencia.info())
+        print("\n--- Valores da Coluna 'Unnamed: 1' ---")
+        coluna_desejada = self.df_referencia['unnamed:1']
+        print(coluna_desejada)
+        #aqui verifiquei que os valores das colunas unnamed:1 precisam ser tratados, excluindo as 5 primeiras linhas
+
+
+    def _limpar_dados(self):
+        """
+        [FASE 4] Limpa os dados dentro da tabela consolidada, tratando
+        valores nulos (NaN, NaT) conforme as regras de negócio.
+        """
+        print("\n--- [FASE 4] Iniciando Limpeza de Dados da Tabela Consolidada ---")
+        
+        if self.df_consolidado is None:
+            print("  [AVISO] Nenhuma tabela consolidada para limpar. Pulando esta etapa.")
+            return
+
+        # É uma boa prática saber quantos nulos temos antes de começar
+        nulos_antes = self.df_consolidado.isnull().sum().sum()
+        print(f" -> Encontrados {nulos_antes} valores nulos (NaN/NaT) antes da limpeza.")
+        print(self.df_consolidado.head())
+
+        # --- REGRAS DE LIMPEZA ---
+        # A estratégia de limpeza depende da coluna. Aqui vão alguns exemplos:
+        
+        # Para colunas de texto (ex: 'cargo'), podemos preencher com 'naoinformado'
+        # if 'cargo' in self.df_consolidado.columns:
+        #     self.df_consolidado['cargo'].fillna('naoinformado', inplace=True)
+
+        # Para colunas numéricas (ex: 'valordiariovr'), podemos preencher com 0
+        if 'valordiariovr' in self.df_consolidado.columns:
+            self.df_consolidado['valordiariovr'].fillna(0, inplace=True)
+            print("   - Valores nulos em 'valordiariovr' foram preenchidos com 0.")
+
+        # Para colunas de data (ex: 'datadedesligamento'), o tratamento é mais delicado.
+        # Geralmente, mantemos o NaT para indicar que a data não existe (o funcionário não foi desligado).
+        # Não faremos nada com as datas por enquanto, a menos que uma regra exija.
+
+        nulos_depois = self.df_consolidado.isnull().sum().sum()
+        print(f" -> {nulos_antes - nulos_depois} valores nulos foram tratados.")
+        print("--- [FASE 4] Limpeza de dados concluída. ---")
+        print(self.df_consolidado.head())
     def executar(self):
         """
         Orquestra a execução de todas as tarefas do agente na ordem correta.
@@ -226,8 +277,9 @@ class AgenteVR:
             # ORDEM DE EXECUÇÃO ALTERADA
             # 1. Prepara e normaliza os dados primeiro.
             self._preparar_dados()
-            self._consolidar_bases_referencia()
-            self._consolidar_dados()
+            self._consolidar_bases_referencia_sindicato()
+            self._consolidar_dados_empregados()
+            # self._limpar_dados()  
             # 2. Inspeciona os dados DEPOIS de terem sido alterados.
             # self.inspecionar_dados()
         else:
