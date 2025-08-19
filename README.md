@@ -14,20 +14,11 @@ Este projeto automatiza o processo de consolidação e preparação de dados de 
 
 A estrutura de arquivos e pastas do projeto está organizada da seguinte forma:
 
+```text
+
 VALE-REFEICAO/
 │
 ├── dados_entrada/
-│   ├── ADMISSÃO ABRIL.xlsx'
-│   ├── 'AFASTAMENTOS.xlsx'
-│   ├── 'APRENDIZ.xlsx'
-│   ├── 'ATIVOS.xlsx'
-│   ├── 'Base dias uteis.xlsx'
-│   ├── 'Base sindicato x valor.xlsx'
-│   ├── 'DESLIGADOS.xlsx'
-│   ├── 'ESTÁGIO.xlsx'
-│   ├── 'EXTERIOR.xlsx'
-│   ├── 'FÉRIAS.xlsx'
-│   ├── 'VR MENSAL 05.2025.xlsx'
 │
 ├── agente_vr.py          # Script principal que executa a automação
 ├── discover_data.py      # Script para análise exploratória dos dados
@@ -37,7 +28,7 @@ VALE-REFEICAO/
 ├── .gitignore            # Arquivos ignorados pelo Git
 ├── README.md             # Este arquivo
 └── requirements.txt      # Dependências do projeto Python
-
+```
 
 ## 🛠️ Instalação e Configuração
 
@@ -119,20 +110,3 @@ git clone https://github.com/dev-leticia-costa/vale_refeicao.git
 
 ```
 
-# Criar ambiente virtual
-python -m venv venv
-
-# Ativar ambiente virtual
-# Windows:
-venv\Scripts\activate
-
-# Linux/Mac:
-source venv/bin/activate
-
-# Instalar dependências
-pip install -r requirements.txt
-
-# Configurar variáveis de ambiente
-cp .env.example .env
-# Editar .env com sua chave de API
-```
